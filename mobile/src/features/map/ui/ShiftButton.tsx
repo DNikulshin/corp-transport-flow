@@ -1,5 +1,6 @@
 import React, { memo } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Play, Square } from 'lucide-react-native'
 import { colors, radii, fontSize, spacing, shadow, palette } from '@/shared/constants/theme'
 
@@ -9,8 +10,10 @@ interface ShiftButtonProps {
 }
 
 function ShiftButtonComponent({ isActive, onToggle }: ShiftButtonProps) {
+  const insets = useSafeAreaInsets()
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { bottom: insets.bottom + 16 }]}>
       <TouchableOpacity
         onPress={onToggle}
         style={[
@@ -39,7 +42,6 @@ export const ShiftButton = memo(ShiftButtonComponent)
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 40,
     left: spacing['3xl'],
     right: spacing['3xl'],
     zIndex: 10,

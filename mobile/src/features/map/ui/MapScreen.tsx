@@ -13,7 +13,7 @@ import { colors } from "@/shared/constants/theme";
 
 import { TopBar } from "./TopBar";
 import { ProfileMenu } from "./ProfileMenu";
-import { VehicleMarker } from "./VehicleMarker";
+import { VehicleMarker, MarkerDesignCapture } from "./VehicleMarker";
 import { VehiclePopup } from "./VehiclePopup";
 import { ShiftButton } from "./ShiftButton";
 import { OfflineBanner } from "./OfflineBanner";
@@ -36,6 +36,11 @@ export default function MapScreen() {
   const [isShiftActive, setIsShiftActive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [vehiclesListOpen, setVehiclesListOpen] = useState(false);
+  const [markerImages, setMarkerImages] = useState<Record<string, string>>({});
+
+  const handleMarkerCapture = useCallback((vehicleId: string, uri: string) => {
+    setMarkerImages((prev) => ({ ...prev, [vehicleId]: uri }));
+  }, []);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(
     null,
   );
@@ -237,9 +242,26 @@ export default function MapScreen() {
             isOwn={user?.vehicleId === vehicle.id}
             isSelected={selectedVehicleId === vehicle.id}
             onPress={handleSelectVehicle}
+            imageUri={markerImages[vehicle.id]}
           />
         ))}
       </MapView>
+
+      {/*
+        Скрытый контейнер за экраном — здесь рендерятся дизайны маркеров
+        для захвата через captureRef. Вне MapView, поэтому все стили работают.
+        pointerEvents="none" — не перехватывает тачи.
+      */}
+      <View style={styles.captureArea} pointerEvents="none">
+        {vehicles.map((vehicle) => (
+          <MarkerDesignCapture
+            key={vehicle.id}
+            vehicle={vehicle}
+            isOwn={user?.vehicleId === vehicle.id}
+            onCapture={(uri) => handleMarkerCapture(vehicle.id, uri)}
+          />
+        ))}
+      </View>
 
       {/*
         UI-обёртка поверх карты.
@@ -313,5 +335,10 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
+  },
+  captureArea: {
+    position: "absolute",
+    top: -9999,
+    left: 0,
   },
 });
