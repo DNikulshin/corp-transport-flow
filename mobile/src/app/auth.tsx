@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -7,22 +7,63 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
   StatusBar,
+  Switch,
   StyleSheet,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Bus, Eye, EyeOff } from 'lucide-react-native'
 import { useAuth } from '@/shared/hooks/use-auth'
+import { useSettingsStore, DEFAULT_API_URL } from '@/shared/stores/settings-store'
 import { colors, radii, fontSize, spacing, shadow, palette } from '@/shared/constants/theme'
 
 export default function AuthScreen() {
   const { login } = useAuth()
+
+  const useCustomServer = useSettingsStore((s) => s.useCustomServer)
+  const customApiUrl = useSettingsStore((s) => s.customApiUrl)
+  const setUseCustomServer = useSettingsStore((s) => s.setUseCustomServer)
+  const setCustomApiUrl = useSettingsStore((s) => s.setCustomApiUrl)
+
+  const [serverInput, setServerInput] = useState(customApiUrl)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [serverStatus, setServerStatus] = useState<'unknown' | 'checking' | 'online' | 'offline'>('unknown')
+  const checkAbortRef = useRef<AbortController | null>(null)
 
   const canSubmit = username.trim().length > 0 && password.trim().length > 0
+
+  const checkServer = useCallback(async (url?: string) => {
+    checkAbortRef.current?.abort()
+    const controller = new AbortController()
+    checkAbortRef.current = controller
+    const target = (url ?? (useCustomServer ? customApiUrl : DEFAULT_API_URL)).replace(/\/$/, '')
+    setServerStatus('checking')
+    try {
+      const res = await fetch(`${target}/health`, { signal: AbortSignal.timeout(5000) })
+      setServerStatus(res.ok ? 'online' : 'offline')
+    } catch {
+      setServerStatus('offline')
+    }
+  }, [useCustomServer, customApiUrl])
+
+  const handleToggleServer = useCallback((value: boolean) => {
+    setUseCustomServer(value)
+    setServerStatus('unknown')
+    if (!value) setServerInput(customApiUrl)
+  }, [setUseCustomServer, customApiUrl])
+
+  const handleServerBlur = useCallback(() => {
+    const trimmed = serverInput.trim().replace(/\/$/, '')
+    if (trimmed) {
+      setCustomApiUrl(trimmed)
+      checkServer(trimmed)
+    }
+  }, [serverInput, setCustomApiUrl, checkServer])
 
   const handleLogin = useCallback(async () => {
     if (!canSubmit) {
@@ -40,88 +81,140 @@ export default function AuthScreen() {
   }, [canSubmit, login, username, password])
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={colors.bgPrimary} />
-
-      <View style={styles.content}>
-        {/* Логотип */}
-        <View style={styles.logoSection}>
-          <View style={styles.logoIcon}>
-            <Bus size={28} color={palette.white} strokeWidth={2} />
-          </View>
-          <Text style={styles.title}>КорпТранспорт</Text>
-          <Text style={styles.subtitle}>Войдите для доступа к системе</Text>
-        </View>
-
-        {/* Форма */}
-        <View style={styles.form}>
-          {/* Логин */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>ЛОГИН</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Введите логин"
-              placeholderTextColor={colors.textDimmed}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-              editable={!isLoading}
-            />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}
+      >
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Логотип */}
+          <View style={styles.logoSection}>
+            <View style={styles.logoIcon}>
+              <Bus size={28} color={palette.white} strokeWidth={2} />
+            </View>
+            <Text style={styles.title}>КорпТранспорт</Text>
+            <Text style={styles.subtitle}>Войдите для доступа к системе</Text>
           </View>
 
-          {/* Пароль */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>ПАРОЛЬ</Text>
-            <View style={styles.passwordWrapper}>
+          {/* Форма */}
+          <View style={styles.form}>
+            {/* Логин */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>ЛОГИН</Text>
               <TextInput
-                style={[styles.input, styles.passwordInput]}
-                placeholder="Введите пароль"
+                style={styles.input}
+                placeholder="Введите логин"
                 placeholderTextColor={colors.textDimmed}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                returnKeyType="done"
-                onSubmitEditing={handleLogin}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
                 editable={!isLoading}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword((v) => !v)}
-                style={styles.eyeBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {showPassword ? (
-                  <EyeOff size={18} color={colors.textMuted} />
-                ) : (
-                  <Eye size={18} color={colors.textMuted} />
-                )}
-              </TouchableOpacity>
+            </View>
+
+            {/* Пароль */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>ПАРОЛЬ</Text>
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  style={[styles.input, styles.passwordInput]}
+                  placeholder="Введите пароль"
+                  placeholderTextColor={colors.textDimmed}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((v) => !v)}
+                  style={styles.eyeBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  {showPassword
+                    ? <EyeOff size={18} color={colors.textMuted} />
+                    : <Eye size={18} color={colors.textMuted} />}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Кнопка входа */}
+            <TouchableOpacity
+              onPress={handleLogin}
+              disabled={isLoading || !canSubmit}
+              style={[styles.submitBtn, { opacity: isLoading || !canSubmit ? 0.5 : 1 }]}
+              activeOpacity={0.8}
+            >
+              {isLoading
+                ? <ActivityIndicator color={palette.white} />
+                : <Text style={styles.submitText}>Войти</Text>}
+            </TouchableOpacity>
+
+            {/* Переключатель сервера */}
+            <View style={styles.serverSection}>
+              <View style={styles.serverToggleRow}>
+                {/* Индикатор доступности — тап = проверить */}
+                <TouchableOpacity onPress={() => checkServer()} hitSlop={8} style={styles.statusDotBtn}>
+                  {serverStatus === 'checking'
+                    ? <ActivityIndicator size={12} color={colors.textMuted} />
+                    : (
+                      <View style={[
+                        styles.statusDot,
+                        serverStatus === 'online' && styles.statusOnline,
+                        serverStatus === 'offline' && styles.statusOffline,
+                      ]} />
+                    )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.serverToggleLabelBtn}
+                  onPress={() => handleToggleServer(!useCustomServer)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.serverToggleLabel}>Сменить сервер</Text>
+                </TouchableOpacity>
+
+                <Switch
+                  value={useCustomServer}
+                  onValueChange={handleToggleServer}
+                  trackColor={{ false: colors.borderInput, true: colors.accentPrimary }}
+                  thumbColor={palette.white}
+                />
+              </View>
+
+              {useCustomServer && (
+                <View style={styles.serverInputGroup}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="http://1.2.3.4:4000"
+                    placeholderTextColor={colors.textDimmed}
+                    value={serverInput}
+                    onChangeText={setServerInput}
+                    onBlur={handleServerBlur}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    editable={!isLoading}
+                  />
+                  <Text style={styles.serverHint}>
+                    Активный: {useCustomServer ? customApiUrl : DEFAULT_API_URL}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
-
-          {/* Кнопка входа */}
-          <TouchableOpacity
-            onPress={handleLogin}
-            disabled={isLoading || !canSubmit}
-            style={[
-              styles.submitBtn,
-              { opacity: isLoading || !canSubmit ? 0.5 : 1 },
-            ]}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={palette.white} />
-            ) : (
-              <Text style={styles.submitText}>Войти</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   )
 }
 
@@ -130,10 +223,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgPrimary,
   },
-  content: {
+  flex: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 32,
   },
 
   // Логотип
@@ -198,7 +295,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
 
-  // Кнопка
+  // Кнопка входа
   submitBtn: {
     backgroundColor: colors.accentPrimary,
     borderRadius: radii.md,
@@ -211,5 +308,50 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: '600',
     fontSize: fontSize['2xl'],
+  },
+
+  // Блок сервера
+  serverSection: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderDefault,
+    paddingTop: spacing['2xl'],
+    gap: spacing['2xl'],
+  },
+  serverToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
+  statusDotBtn: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.textDimmed,
+  },
+  statusOnline: {
+    backgroundColor: colors.accentSuccess,
+  },
+  statusOffline: {
+    backgroundColor: colors.accentDanger,
+  },
+  serverToggleLabelBtn: {
+    flex: 1,
+  },
+  serverToggleLabel: {
+    color: colors.textMuted,
+    fontSize: fontSize.lg,
+  },
+  serverInputGroup: {
+    gap: spacing.md,
+  },
+  serverHint: {
+    color: colors.textDimmed,
+    fontSize: fontSize.sm,
   },
 })

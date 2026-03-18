@@ -6,7 +6,7 @@ import {
   TouchableWithoutFeedback,
   StyleSheet,
 } from 'react-native'
-import { LogOut } from 'lucide-react-native'
+import { LogOut, Settings } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { UserRole } from '@/domain/user-domain'
 import { colors, radii, fontSize, spacing } from '@/shared/constants/theme'
@@ -17,6 +17,7 @@ interface ProfileMenuProps {
   visible: boolean
   onClose: () => void
   onLogout: () => void
+  onSettings: () => void
 }
 
 const roleLabels: Record<UserRole, string> = {
@@ -31,6 +32,7 @@ function ProfileMenuComponent({
   visible,
   onClose,
   onLogout,
+  onSettings,
 }: ProfileMenuProps) {
   const insets = useSafeAreaInsets()
 
@@ -48,6 +50,10 @@ function ProfileMenuComponent({
           <Text style={styles.name}>{fullName}</Text>
           <Text style={styles.role}>{roleLabels[role]}</Text>
         </View>
+        <TouchableOpacity onPress={onSettings} style={styles.menuBtn}>
+          <Settings size={14} color={colors.textMuted} />
+          <Text style={styles.menuBtnText}>Настройки</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={onLogout} style={styles.logoutBtn}>
           <LogOut size={14} color={colors.textDanger} />
           <Text style={styles.logoutText}>Выйти</Text>
@@ -89,6 +95,18 @@ const styles = StyleSheet.create({
     color: colors.textDimmed,
     fontSize: fontSize.md,
     marginTop: 2,
+  },
+  menuBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing['2xl'],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderDefault,
+  },
+  menuBtnText: {
+    color: colors.textSecondary,
+    fontSize: fontSize.lg,
   },
   logoutBtn: {
     flexDirection: 'row',

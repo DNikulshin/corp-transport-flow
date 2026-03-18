@@ -13,6 +13,7 @@ import { colors } from "@/shared/constants/theme";
 
 import { TopBar } from "./TopBar";
 import { ProfileMenu } from "./ProfileMenu";
+import { SettingsModal } from "./SettingsModal";
 import { VehicleMarker, MarkerDesignCapture } from "./VehicleMarker";
 import { VehiclePopup } from "./VehiclePopup";
 import { ShiftButton } from "./ShiftButton";
@@ -35,6 +36,7 @@ export default function MapScreen() {
 
   const [isShiftActive, setIsShiftActive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [vehiclesListOpen, setVehiclesListOpen] = useState(false);
   const [markerImages, setMarkerImages] = useState<Record<string, string>>({});
 
@@ -102,71 +104,93 @@ export default function MapScreen() {
       return;
     }
 
-    const bg = await Location.requestBackgroundPermissionsAsync();
-    if (bg.status !== "granted") {
-      Alert.alert(
-        "Нет доступа",
-        "Для фоновой отправки GPS нужно разрешение на геолокацию в фоне. Разрешите в настройках.",
-      );
-      return;
-    }
-
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 5_000,
-      distanceInterval: 10,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: "КорпТранспорт",
-        notificationBody: "Трансляция GPS активна",
-        notificationColor: "#0ea5e9",
-      },
-    });
-
-    // Получаем текущую позицию; если не удалось — пробуем последнюю известную.
-    const initialPos =
-      (await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      }).catch(() => null)) ??
-      (await Location.getLastKnownPositionAsync().catch(() => null));
-
-    const posPayload = initialPos
-      ? {
-          lat: initialPos.coords.latitude,
-          lng: initialPos.coords.longitude,
-          heading: initialPos.coords.heading ?? 0,
-          speed: initialPos.coords.speed
-            ? Math.round(initialPos.coords.speed * 3.6)
-            : 0,
-          timestamp: initialPos.timestamp,
-        }
-      : null;
-
-    await api.post("/tracking/online", posPayload ?? {}).catch(() => {});
-
-    // Обновляем стор напрямую — маркер появляется сразу, не ожидая SSE.
-    if (user?.vehicleId) {
-      setVehicleOnline(user.vehicleId);
-      if (posPayload) {
-        storeUpdatePosition({ vehicleId: user.vehicleId, ...posPayload });
+    try {
+      // На Android 12+ фоновое разрешение требует сначала выданного foreground
+      const fg = await Location.getForegroundPermissionsAsync();
+      if (fg.status !== "granted") {
+        Alert.alert("Нет доступа", "Разрешите доступ к геолокации.");
+        return;
       }
-    }
 
-    // Центрируем карту на текущей позиции водителя
-    if (initialPos) {
-      mapRef.current?.animateToRegion(
-        {
-          latitude: initialPos.coords.latitude,
-          longitude: initialPos.coords.longitude,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
+      const bg = await Location.requestBackgroundPermissionsAsync();
+      if (bg.status !== "granted") {
+        Alert.alert(
+          "Нет доступа",
+          "Для фоновой отправки GPS выберите «Всегда» в настройках приложения → Разрешения → Геолокация.",
+        );
+        return;
+      }
+
+      // Если задача уже запущена — останавливаем перед повторным стартом
+      const isRunning = await Location.hasStartedLocationUpdatesAsync(
+        LOCATION_TASK_NAME,
+      ).catch(() => false);
+      if (isRunning) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME).catch(() => {});
+      }
+
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 5_000,
+        distanceInterval: 10,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: "КорпТранспорт",
+          notificationBody: "Трансляция GPS активна",
+          notificationColor: "#0ea5e9",
         },
-        600,
-      );
-      hasCenteredRef.current = true;
-    }
+      });
 
-    setIsShiftActive(true);
+      // Получаем текущую позицию; если не удалось — пробуем последнюю известную.
+      const initialPos =
+        (await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }).catch(() => null)) ??
+        (await Location.getLastKnownPositionAsync().catch(() => null));
+
+      const posPayload = initialPos
+        ? {
+            lat: initialPos.coords.latitude,
+            lng: initialPos.coords.longitude,
+            heading: initialPos.coords.heading ?? 0,
+            speed: initialPos.coords.speed
+              ? Math.round(initialPos.coords.speed * 3.6)
+              : 0,
+            timestamp: initialPos.timestamp,
+          }
+        : null;
+
+      await api.post("/tracking/online", posPayload ?? {}).catch(() => {});
+
+      // Обновляем стор напрямую — маркер появляется сразу, не ожидая SSE.
+      if (user?.vehicleId) {
+        setVehicleOnline(user.vehicleId);
+        if (posPayload) {
+          storeUpdatePosition({ vehicleId: user.vehicleId, ...posPayload });
+        }
+      }
+
+      // Центрируем карту на текущей позиции водителя
+      if (initialPos) {
+        mapRef.current?.animateToRegion(
+          {
+            latitude: initialPos.coords.latitude,
+            longitude: initialPos.coords.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          },
+          600,
+        );
+        hasCenteredRef.current = true;
+      }
+
+      setIsShiftActive(true);
+    } catch (err) {
+      Alert.alert(
+        "Ошибка запуска смены",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }, [isShiftActive, user?.vehicleId, setVehicleOnline, setVehicleOffline, storeUpdatePosition]);
 
   const handleSelectVehicle = useCallback((vehicleId: string) => {
@@ -297,6 +321,13 @@ export default function MapScreen() {
           visible={menuOpen}
           onClose={() => setMenuOpen(false)}
           onLogout={handleLogout}
+          onSettings={() => { setMenuOpen(false); setSettingsOpen(true); }}
+        />
+
+        {/* Модал настроек */}
+        <SettingsModal
+          visible={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
         />
 
         {/* Баннер оффлайна */}

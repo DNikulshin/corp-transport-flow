@@ -1,16 +1,15 @@
 import axios from 'axios'
 import * as SecureStore from 'expo-secure-store'
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000'
+import { getApiUrl } from '../stores/settings-store'
 
 export const api = axios.create({
-  baseURL: `${BASE_URL}/api`,
   headers: { 'Content-Type': 'application/json' },
   timeout: 15_000,
 })
 
-/** Добавляем access token к каждому запросу. */
+/** Добавляем access token и текущий baseURL к каждому запросу. */
 api.interceptors.request.use(async (config) => {
+  config.baseURL = `${getApiUrl()}/api`
   const token = await SecureStore.getItemAsync('accessToken')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
@@ -34,7 +33,7 @@ api.interceptors.response.use(
       if (!refreshToken) throw new Error('No refresh token')
 
       // Используем чистый axios, чтобы не зациклить интерсептор
-      const res = await axios.post(`${BASE_URL}/api/auth/refresh`, { refreshToken })
+      const res = await axios.post(`${getApiUrl()}/api/auth/refresh`, { refreshToken })
       const { accessToken: newAccessToken } = res.data
 
       await SecureStore.setItemAsync('accessToken', newAccessToken)
@@ -52,4 +51,5 @@ api.interceptors.response.use(
   },
 )
 
-export { BASE_URL }
+/** @deprecated используй getApiUrl() из settings-store */
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000'

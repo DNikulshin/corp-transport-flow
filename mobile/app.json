@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "КорпТранспорт",
+    "slug": "corp-transport",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "com.corpTransport.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Приложению требуется доступ к геолокации для отслеживания маршрута."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "06cd97c0-1e6f-43dd-8f2c-b82071d9a1cc"
+      }
+    },
+    "owner": "dnikulshun"
+  }
+}

@@ -3,6 +3,7 @@ import * as Location from 'expo-location'
 import * as SecureStore from 'expo-secure-store'
 import NetInfo from '@react-native-community/netinfo'
 import { useLocationStore } from '../shared/stores/location-store'
+import { getApiUrl } from '../shared/stores/settings-store'
 
 export const LOCATION_TASK_NAME = 'background-location-task'
 
@@ -12,13 +13,7 @@ let ws: WebSocket | null = null
 let wsConnected = false
 
 function getWsUrl(token: string): string {
-  // Бэкенд регистрирует WS на /api/tracking/ws (prefix + route).
-  // Получаем ws:// URL из EXPO_PUBLIC_API_URL (http://...).
-  const httpBase = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000').replace(
-    /\/$/,
-    '',
-  )
-  const wsBase = httpBase.replace(/^http/, 'ws')
+  const wsBase = getApiUrl().replace(/\/$/, '').replace(/^http/, 'ws')
   return `${wsBase}/api/tracking/ws?token=${encodeURIComponent(token)}`
 }
 

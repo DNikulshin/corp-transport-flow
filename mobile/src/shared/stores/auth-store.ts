@@ -6,6 +6,7 @@ const KEYS = {
   accessToken: 'accessToken',
   refreshToken: 'refreshToken',
   vehicleId: 'vehicleId',
+  user: 'cachedUser',
 } as const
 
 interface AuthState {
@@ -33,6 +34,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await Promise.all([
         SecureStore.setItemAsync(KEYS.accessToken, accessToken),
         SecureStore.setItemAsync(KEYS.refreshToken, refreshToken),
+        SecureStore.setItemAsync(KEYS.user, JSON.stringify(user)),
         user.vehicleId
           ? SecureStore.setItemAsync(KEYS.vehicleId, user.vehicleId)
           : Promise.resolve(),
@@ -41,47 +43,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     },
 
     logout: async () => {
-      // Сначала сбрасываем стейт, потом чистим хранилище —
-      // так UI мгновенно реагирует, не дожидаясь I/O.
-      set({
-        user: null,
-        accessToken: null,
-        refreshToken: null,
-        isAuthenticated: false,
-      })
+      set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false })
       await Promise.all([
         SecureStore.deleteItemAsync(KEYS.accessToken),
         SecureStore.deleteItemAsync(KEYS.refreshToken),
         SecureStore.deleteItemAsync(KEYS.vehicleId),
+        SecureStore.deleteItemAsync(KEYS.user),
       ]).catch(() => {})
     },
 
     loadTokens: async () => {
       try {
-        const [accessToken, refreshToken] = await Promise.all([
+        const [accessToken, refreshToken, userJson] = await Promise.all([
           SecureStore.getItemAsync(KEYS.accessToken),
           SecureStore.getItemAsync(KEYS.refreshToken),
+          SecureStore.getItemAsync(KEYS.user),
         ])
 
-        if (!accessToken || !refreshToken) {
+        if (!accessToken || !refreshToken || !userJson) {
           set({ isLoading: false })
           return
         }
 
-        // Проверяем валидность токена, загружая профиль
-        const { api } = await import('../api/http-client')
-        const res = await api.get('/auth/me')
+        const cachedUser: User = JSON.parse(userJson)
 
-        set({
-          user: res.data,
-          accessToken,
-          refreshToken,
-          isAuthenticated: true,
-          isLoading: false,
-        })
+        // Немедленно восстанавливаем сессию из кеша — приложение открывается без задержки
+        set({ user: cachedUser, accessToken, refreshToken, isAuthenticated: true, isLoading: false })
+
+        // Фоновая проверка токена: обновляем user и обрабатываем только явный 401
+        try {
+          const { api } = await import('../api/http-client')
+          const res = await api.get('/auth/me')
+          set({ user: res.data })
+        } catch (bgErr: unknown) {
+          const status = (bgErr as { response?: { status?: number } })?.response?.status
+          if (status === 401) {
+            // Токен отозван — разлогиниваем
+            await get().actions.logout()
+          }
+          // Сетевая ошибка — оставляем сессию активной
+        }
       } catch {
-        // Токены невалидны — чистим
-        await get().actions.logout()
         set({ isLoading: false })
       }
     },
