@@ -5,7 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
 export default defineConfig({
-  publicDir: path.resolve(__dirname, 'src/public'), 
+  base: process.env.VITE_BASE_URL ?? '/',
+  publicDir: path.resolve(__dirname, 'src/public'),
   plugins: [
     react(),
     tailwindcss(),
@@ -24,7 +25,7 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        start_url: process.env.VITE_BASE_URL ?? '/',
         icons: [
           {
             src: 'icons/icon-192.png',

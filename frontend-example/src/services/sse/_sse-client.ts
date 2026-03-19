@@ -37,7 +37,8 @@ export class SseClient<T = unknown> {
       return
     }
 
-    const url = `/api${this.path}?token=${encodeURIComponent(token)}`
+    const base = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api'
+    const url = `${base}${this.path}?token=${encodeURIComponent(token)}`
     this.es = new EventSource(url)
 
     this.es.onopen = () => {

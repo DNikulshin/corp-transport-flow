@@ -27,23 +27,26 @@ const PageLoader = () => (
   </div>
 )
 
-export const router = createBrowserRouter([
-  {
-    path: ROUTES.AUTH,
-    element: (
-      <Suspense fallback={<PageLoader />}>
-        <AuthPage />
-      </Suspense>
-    ),
-  },
-  {
-    path: ROUTES.MAP,
-    element: (
-      <ProtectedRoute>
+export const router = createBrowserRouter(
+  [
+    {
+      path: ROUTES.AUTH,
+      element: (
         <Suspense fallback={<PageLoader />}>
-          <MapPage />
+          <AuthPage />
         </Suspense>
-      </ProtectedRoute>
-    ),
-  },
-])
+      ),
+    },
+    {
+      path: ROUTES.MAP,
+      element: (
+        <ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <MapPage />
+          </Suspense>
+        </ProtectedRoute>
+      ),
+    },
+  ],
+  { basename: import.meta.env.BASE_URL },
+)

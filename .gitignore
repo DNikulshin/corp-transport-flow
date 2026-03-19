@@ -1,5 +1,7 @@
 backend/node_modules
 mobile/node_modules
+frontend-example/node_modules
+*.tar.gz
 dist
 .env
 *.local

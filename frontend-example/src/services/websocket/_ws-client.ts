@@ -41,8 +41,10 @@ export class WsClient {
       return
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${window.location.host}${this.path}?token=${encodeURIComponent(token)}`
+    const wsBase = import.meta.env.VITE_WS_URL as string | undefined
+    const url = wsBase
+      ? `${wsBase}${this.path}?token=${encodeURIComponent(token)}`
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${this.path}?token=${encodeURIComponent(token)}`
 
     this.ws = new WebSocket(url)
 

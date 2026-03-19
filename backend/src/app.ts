@@ -19,6 +19,7 @@ async function main() {
     'http://localhost:3000',
     /\.cloudworkstations\.dev$/,
     /\.localtunnel\.me$/,
+    /^https:\/\/[^.]+\.github\.io$/,
   ]
 
   await app.register(fastifyCors, {
