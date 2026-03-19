@@ -1,154 +1,158 @@
 /**
- * Generates app-icon.png (1024×1024) — blue rounded square + white bus
+ * Generates app icon PNGs for all Android mipmap densities.
+ * Replaces existing ic_launcher.webp / ic_launcher_round.webp
  * Run: node scripts/generate-icon.mjs
  */
 import { PNG } from '../node_modules/pngjs/lib/png.js'
-import { createWriteStream } from 'fs'
+import { createWriteStream, mkdirSync, rmSync, existsSync } from 'fs'
 import { fileURLToPath } from 'url'
 import path from 'path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const SIZE = 1024
-const png = new PNG({ width: SIZE, height: SIZE, filterType: -1 })
+const ROOT = path.join(__dirname, '..')
+const RES  = path.join(ROOT, 'android/app/src/main/res')
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-const BG  = { r: 0x0e, g: 0xa5, b: 0xea } // #0ea5e9  sky-500
-const FG  = { r: 0xff, g: 0xff, b: 0xff } // white
-
-function idx(x, y) { return (y * SIZE + x) * 4 }
-
-function setPixel(x, y, c, a = 255) {
-  if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return
-  const i = idx(x, y)
-  png.data[i]     = c.r
-  png.data[i + 1] = c.g
-  png.data[i + 2] = c.b
-  png.data[i + 3] = a
+const SIZES = {
+  'mipmap-mdpi':    48,
+  'mipmap-hdpi':    72,
+  'mipmap-xhdpi':   96,
+  'mipmap-xxhdpi':  144,
+  'mipmap-xxxhdpi': 192,
 }
 
-// filled circle / anti-alias not needed — just paint pixels
-function fillRect(x0, y0, x1, y1, c) {
-  for (let y = y0; y <= y1; y++)
-    for (let x = x0; x <= x1; x++)
-      setPixel(x, y, c)
-}
+const BG = { r: 0x0e, g: 0xa5, b: 0xea } // #0ea5e9 sky-500
+const FG = { r: 0xff, g: 0xff, b: 0xff }
 
-function fillCircle(cx, cy, r, c) {
-  for (let y = cy - r; y <= cy + r; y++)
-    for (let x = cx - r; x <= cx + r; x++)
-      if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r)
+// ── raster helpers ────────────────────────────────────────────────────────────
+function makePNG(size) {
+  const png = new PNG({ width: size, height: size, filterType: -1 })
+  png.data.fill(0)
+
+  function setPixel(x, y, c, a = 255) {
+    if (x < 0 || x >= size || y < 0 || y >= size) return
+    const i = (y * size + x) * 4
+    png.data[i]     = c.r
+    png.data[i + 1] = c.g
+    png.data[i + 2] = c.b
+    png.data[i + 3] = a
+  }
+
+  function fillRect(x0, y0, x1, y1, c) {
+    for (let y = Math.max(0, y0); y <= Math.min(size - 1, y1); y++)
+      for (let x = Math.max(0, x0); x <= Math.min(size - 1, x1); x++)
         setPixel(x, y, c)
-}
+  }
 
-function fillRoundRect(x0, y0, x1, y1, r, c) {
-  fillRect(x0 + r, y0, x1 - r, y1, c)
-  fillRect(x0, y0 + r, x1, y1 - r, c)
-  fillCircle(x0 + r, y0 + r, r, c)
-  fillCircle(x1 - r, y0 + r, r, c)
-  fillCircle(x0 + r, y1 - r, r, c)
-  fillCircle(x1 - r, y1 - r, r, c)
-}
+  function fillCircle(cx, cy, r, c) {
+    for (let y = cy - r; y <= cy + r; y++)
+      for (let x = cx - r; x <= cx + r; x++)
+        if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r)
+          setPixel(x, y, c)
+  }
 
-// ── 1. fill background transparent ───────────────────────────────────────────
-png.data.fill(0)
+  function fillRoundRect(x0, y0, x1, y1, r, c) {
+    const rr = Math.min(r, Math.floor((x1 - x0) / 2), Math.floor((y1 - y0) / 2))
+    fillRect(x0 + rr, y0, x1 - rr, y1, c)
+    fillRect(x0, y0 + rr, x1, y1 - rr, c)
+    fillCircle(x0 + rr, y0 + rr, rr, c)
+    fillCircle(x1 - rr, y0 + rr, rr, c)
+    fillCircle(x0 + rr, y1 - rr, rr, c)
+    fillCircle(x1 - rr, y1 - rr, rr, c)
+  }
 
-// ── 2. blue rounded-rect background (radius ≈ 22%) ───────────────────────────
-const PAD  = 40          // safe-zone inset for adaptive icon
-const RAD  = 200         // corner radius
-fillRoundRect(PAD, PAD, SIZE - PAD, SIZE - PAD, RAD, BG)
+  const S = size
+  // Background: blue rounded rect
+  const PAD = Math.round(S * 0.04)
+  const RAD = Math.round(S * 0.19)
+  fillRoundRect(PAD, PAD, S - PAD - 1, S - PAD - 1, RAD, BG)
 
-// ── 3. white bus (Material Design bus icon, scaled to ~55% of canvas) ─────────
-// Bus bounding box: 256×256 centred on 512,512; source viewBox 0 0 24 24
-const BUS_SIZE = 560   // px
-const OX = (SIZE - BUS_SIZE) / 2   // offset x
-const OY = (SIZE - BUS_SIZE) / 2   // offset y
-const S  = BUS_SIZE / 24           // scale factor
+  // Bus shape (scaled from 24×24 viewBox)
+  const busW = Math.round(S * 0.68)
+  const OX = Math.round((S - busW) / 2)
+  const OY = Math.round((S - busW) / 2 + S * 0.02)
+  const sc = busW / 24
 
-function busPixel(bx, by) {
-  // bx, by in [0..24] viewBox coords
-  const px = Math.round(OX + bx * S)
-  const py = Math.round(OY + by * S)
-  setPixel(px, py, FG)
-}
-
-// Rasterise Material "directions_bus" path:
-// M4,16c0,.88.39,1.67,1,2.22V20c0,.55.45,1,1,1h1c.55,0,1-.45,1-1v-1h8v1
-// c0,.55.45,1,1,1h1c.55,0,1-.45,1-1v-1.78c.61-.55,1-1.34,1-2.22V6
-// c0-3.5-3.58-4-8-4s-8,.5-8,4v10zm3.5,1c-.83,0-1.5-.67-1.5-1.5S6.67,14,
-// 7.5,14s1.5,.67,1.5,1.5S8.33,17,7.5,17zm9,0c-.83,0-1.5-.67-1.5-1.5
-// s.67-1.5,1.5-1.5 1.5,.67,1.5,1.5-.67,1.5-1.5,1.5zm1.5-6H6V6h12v5z
-
-// Simplified filled shapes that approximate the bus icon:
-function fillBusShape() {
-  const s = S
-
-  // Body: filled rounded rect from (3,5) to (21,17)
+  // Body
   fillRoundRect(
-    Math.round(OX + 3 * s), Math.round(OY + 5 * s),
-    Math.round(OX + 21 * s), Math.round(OY + 17 * s),
-    Math.round(1.5 * s), FG,
+    Math.round(OX + 3 * sc), Math.round(OY + 5 * sc),
+    Math.round(OX + 21 * sc), Math.round(OY + 17 * sc),
+    Math.max(1, Math.round(1.5 * sc)), FG,
   )
 
-  // Horizontal divider (windows bottom): filled strip at y=10..11
+  // Windows area (cut out with BG)
   fillRect(
-    Math.round(OX + 3 * s), Math.round(OY + 10 * s),
-    Math.round(OX + 21 * s), Math.round(OY + 11 * s),
+    Math.round(OX + 3.5 * sc), Math.round(OY + 10.2 * sc),
+    Math.round(OX + 20.5 * sc), Math.round(OY + 11 * sc),
     BG,
   )
-
-  // Left window: BG rect inside body at (4,6)-(10,9)
   fillRoundRect(
-    Math.round(OX + 4 * s), Math.round(OY + 6 * s),
-    Math.round(OX + 10 * s), Math.round(OY + 9 * s),
-    Math.round(s * 0.8), BG,
+    Math.round(OX + 4.2 * sc), Math.round(OY + 5.8 * sc),
+    Math.round(OX + 10.5 * sc), Math.round(OY + 9.5 * sc),
+    Math.max(1, Math.round(sc * 0.7)), BG,
   )
-
-  // Right window
   fillRoundRect(
-    Math.round(OX + 14 * s), Math.round(OY + 6 * s),
-    Math.round(OX + 20 * s), Math.round(OY + 9 * s),
-    Math.round(s * 0.8), BG,
-  )
-
-  // Door divider (centre vertical)
-  fillRect(
-    Math.round(OX + 11.5 * s), Math.round(OY + 11 * s),
-    Math.round(OX + 12.5 * s), Math.round(OY + 17 * s),
-    BG,
-  )
-
-  // Lower bumper / front
-  fillRect(
-    Math.round(OX + 3 * s), Math.round(OY + 17 * s),
-    Math.round(OX + 21 * s), Math.round(OY + 19 * s),
-    FG,
+    Math.round(OX + 13.5 * sc), Math.round(OY + 5.8 * sc),
+    Math.round(OX + 19.8 * sc), Math.round(OY + 9.5 * sc),
+    Math.max(1, Math.round(sc * 0.7)), BG,
   )
 
   // Left wheel
   fillCircle(
-    Math.round(OX + 7.5 * s), Math.round(OY + 19.5 * s),
-    Math.round(1.8 * s), FG,
+    Math.round(OX + 7.5 * sc), Math.round(OY + 18.8 * sc),
+    Math.max(1, Math.round(1.7 * sc)), FG,
   )
   fillCircle(
-    Math.round(OX + 7.5 * s), Math.round(OY + 19.5 * s),
-    Math.round(0.8 * s), BG,
+    Math.round(OX + 7.5 * sc), Math.round(OY + 18.8 * sc),
+    Math.max(1, Math.round(0.7 * sc)), BG,
   )
 
   // Right wheel
   fillCircle(
-    Math.round(OX + 16.5 * s), Math.round(OY + 19.5 * s),
-    Math.round(1.8 * s), FG,
+    Math.round(OX + 16.5 * sc), Math.round(OY + 18.8 * sc),
+    Math.max(1, Math.round(1.7 * sc)), FG,
   )
   fillCircle(
-    Math.round(OX + 16.5 * s), Math.round(OY + 19.5 * s),
-    Math.round(0.8 * s), BG,
+    Math.round(OX + 16.5 * sc), Math.round(OY + 18.8 * sc),
+    Math.max(1, Math.round(0.7 * sc)), BG,
   )
+
+  return png
 }
 
-fillBusShape()
+// ── write one PNG ─────────────────────────────────────────────────────────────
+function writePNG(png, outPath) {
+  return new Promise((resolve, reject) => {
+    png.pack().pipe(createWriteStream(outPath))
+      .on('finish', resolve)
+      .on('error', reject)
+  })
+}
 
-// ── 4. write PNG ─────────────────────────────────────────────────────────────
-const outPath = path.join(__dirname, '..', 'assets', 'app-icon.png')
-png.pack().pipe(createWriteStream(outPath))
-  .on('finish', () => console.log(`✓ Icon written → ${outPath}`))
-  .on('error', (e) => { console.error(e); process.exit(1) })
+// ── main ──────────────────────────────────────────────────────────────────────
+async function main() {
+  // Source icon (1024×1024)
+  const assetsDir = path.join(ROOT, 'assets')
+  mkdirSync(assetsDir, { recursive: true })
+  await writePNG(makePNG(1024), path.join(assetsDir, 'app-icon.png'))
+  console.log('✓ assets/app-icon.png  (1024×1024)')
+
+  // Mipmap sizes
+  for (const [folder, size] of Object.entries(SIZES)) {
+    const dir = path.join(RES, folder)
+    if (!existsSync(dir)) { mkdirSync(dir, { recursive: true }) }
+
+    // Remove old webp files
+    for (const name of ['ic_launcher.webp', 'ic_launcher_round.webp']) {
+      const f = path.join(dir, name)
+      if (existsSync(f)) rmSync(f)
+    }
+
+    await writePNG(makePNG(size), path.join(dir, 'ic_launcher.png'))
+    await writePNG(makePNG(size), path.join(dir, 'ic_launcher_round.png'))
+    console.log(`✓ ${folder}/ic_launcher.png  (${size}×${size})`)
+  }
+
+  console.log('\nDone! All icons generated.')
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })
