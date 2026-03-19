@@ -1,0 +1,13 @@
+FROM reactnativecommunity/react-native-android:latest
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --legacy-peer-deps
+
+COPY . .
+
+RUN cd android && ./gradlew assembleDebug \
+      --no-daemon \
+      --stacktrace \
+      -PreactNativeArchitectures=arm64-v8a
