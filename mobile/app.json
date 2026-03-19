@@ -22,7 +22,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Приложению требуется доступ к геолокации для отслеживания маршрута."
+          "locationAlwaysAndWhenInUsePermission": "Приложению требуется доступ к геолокации для отслеживания маршрута.",
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],
