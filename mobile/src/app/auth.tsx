@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Bus, Eye, EyeOff } from 'lucide-react-native'
 import { useAuth } from '@/shared/hooks/use-auth'
-import { useSettingsStore, DEFAULT_API_URL } from '@/shared/stores/settings-store'
+import { useSettingsStore } from '@/shared/stores/settings-store'
 import { colors, radii, fontSize, spacing, shadow, palette } from '@/shared/constants/theme'
 
 export default function AuthScreen() {
@@ -39,9 +39,8 @@ export default function AuthScreen() {
 
   const checkServer = useCallback(async (url?: string) => {
     checkAbortRef.current?.abort()
-    const controller = new AbortController()
-    checkAbortRef.current = controller
-    const target = (url ?? (useCustomServer ? customApiUrl : DEFAULT_API_URL)).replace(/\/$/, '')
+    checkAbortRef.current = new AbortController()
+    const target = (url ?? customApiUrl).replace(/\/$/, '')
     setServerStatus('checking')
     try {
       const res = await fetch(`${target}/health`, { signal: AbortSignal.timeout(5000) })
@@ -49,12 +48,15 @@ export default function AuthScreen() {
     } catch {
       setServerStatus('offline')
     }
-  }, [useCustomServer, customApiUrl])
+  }, [customApiUrl])
+
+  useEffect(() => {
+    checkServer()
+  }, [checkServer])
 
   const handleToggleServer = useCallback((value: boolean) => {
     setUseCustomServer(value)
-    setServerStatus('unknown')
-    if (!value) setServerInput(customApiUrl)
+    if (value) setServerInput(customApiUrl)
   }, [setUseCustomServer, customApiUrl])
 
   const handleServerBlur = useCallback(() => {
@@ -175,13 +177,15 @@ export default function AuthScreen() {
                     )}
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.serverToggleLabelBtn}
-                  onPress={() => handleToggleServer(!useCustomServer)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.serverToggleLabel}>Сменить сервер</Text>
-                </TouchableOpacity>
+                <Text style={styles.serverToggleLabel}>Сервер</Text>
+
+                {!useCustomServer && (
+                  <Text style={styles.serverHostname} numberOfLines={1} ellipsizeMode="middle">
+                    {(() => { try { return new URL(customApiUrl).hostname } catch { return customApiUrl } })()}
+                  </Text>
+                )}
+
+                <View style={styles.serverToggleSpacer} />
 
                 <Switch
                   value={useCustomServer}
@@ -205,9 +209,6 @@ export default function AuthScreen() {
                     keyboardType="url"
                     editable={!isLoading}
                   />
-                  <Text style={styles.serverHint}>
-                    Активный: {useCustomServer ? customApiUrl : DEFAULT_API_URL}
-                  </Text>
                 </View>
               )}
             </View>
@@ -340,18 +341,20 @@ const styles = StyleSheet.create({
   statusOffline: {
     backgroundColor: colors.accentDanger,
   },
-  serverToggleLabelBtn: {
-    flex: 1,
-  },
   serverToggleLabel: {
     color: colors.textMuted,
     fontSize: fontSize.lg,
+    marginRight: spacing.md,
+  },
+  serverHostname: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: fontSize.md,
+  },
+  serverToggleSpacer: {
+    flex: 1,
   },
   serverInputGroup: {
     gap: spacing.md,
-  },
-  serverHint: {
-    color: colors.textDimmed,
-    fontSize: fontSize.sm,
   },
 })

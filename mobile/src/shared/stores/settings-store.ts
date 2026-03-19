@@ -22,12 +22,10 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'settings-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ customApiUrl: state.customApiUrl }),
     },
   ),
 )
 
 /** Читает текущий API URL вне React-контекста (для интерсепторов, фоновых задач). */
-export const getApiUrl = () => {
-  const { useCustomServer, customApiUrl } = useSettingsStore.getState()
-  return useCustomServer ? customApiUrl : DEFAULT_API_URL
-}
+export const getApiUrl = () => useSettingsStore.getState().customApiUrl
