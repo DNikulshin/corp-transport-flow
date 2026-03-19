@@ -9,8 +9,10 @@
     ],
     "android": {
       "package": "com.corpTransport.app",
+      "icon": "./assets/app-icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/app-icon.png",
+        "backgroundColor": "#0ea5e9"
       },
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
